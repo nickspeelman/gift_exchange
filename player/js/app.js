@@ -1,8 +1,10 @@
 // player/js/app.js
 
 const STORAGE_KEYS = {
-  gameId: "we_game_id"
+  gameId: "we_game_id",
+  publicMessage: "we_public_message"
 };
+
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
@@ -67,7 +69,7 @@ function renderSession(gameId, source) {
 }
 
 function init() {
-  // Start in "live" but idle; later this will reflect polling state
+  // Start optimistic
   setLiveStatus("live", "Idle");
 
   // 1) Prefer URL
@@ -76,6 +78,7 @@ function init() {
     localStorage.setItem(STORAGE_KEYS.gameId, fromUrl);
     renderSession(fromUrl, "URL");
     setPublicMessage("Connected. Waiting for the host to start the game…");
+    startPolling(fromUrl);
     return;
   }
 
@@ -85,10 +88,81 @@ function init() {
 
   if (fromStorage) {
     setPublicMessage("Reconnected. Waiting for the host to start the game…");
+    startPolling(fromStorage);
   } else {
     setPublicMessage("Not connected to a game yet.");
     setLiveStatus("error", "Missing gameId");
   }
 }
+
+function readPublicMessageFromStorage() {
+  return localStorage.getItem(STORAGE_KEYS.publicMessage) || "";
+}
+
+// This is our "backend" for now.
+// Later, this will fetch JSON from Apps Script.
+async function poll(gameId, ctx) {
+  // gameId is unused for localStorage, but we include it now so the signature matches future API polling.
+  const msg = readPublicMessageFromStorage();
+
+  const changed = msg !== ctx.lastMessage;
+  if (changed) {
+    ctx.lastMessage = msg;
+  }
+
+  return {
+    ok: true,
+    changed,
+    publicMessage: msg
+  };
+}
+
+function startPolling(gameId) {
+  const ctx = {
+    lastMessage: null,
+    timerId: null,
+    inFlight: false
+  };
+
+  // Seed lastMessage so first poll behaves nicely
+  ctx.lastMessage = readPublicMessageFromStorage();
+  if (ctx.lastMessage) {
+    setPublicMessage(ctx.lastMessage);
+  }
+
+  async function tick() {
+    if (ctx.inFlight) return;
+    ctx.inFlight = true;
+
+    try {
+      setLiveStatus("live", "Polling");
+      const res = await poll(gameId, ctx);
+
+      if (!res.ok) {
+        setLiveStatus("error", "Reconnecting…");
+        return;
+      }
+
+      if (res.changed) {
+        setPublicMessage(res.publicMessage || "Waiting for game updates…");
+        setLiveStatus("live", "Updated");
+        setTimeout(() => setLiveStatus("live", "Idle"), 600);
+      } else {
+        setLiveStatus("live", "Idle");
+      }
+    } catch (err) {
+      console.error(err);
+      setLiveStatus("error", "Reconnecting…");
+    } finally {
+      ctx.inFlight = false;
+    }
+  }
+
+  // Start now + repeat
+  tick();
+  ctx.timerId = setInterval(tick, 1200);
+}
+
+
 
 document.addEventListener("DOMContentLoaded", init);

@@ -22,6 +22,21 @@
     <div id="result" class="result" aria-live="polite"></div>
   </section>
 
+<section class="card" style="margin-top: 1rem;">
+   <h2>Public message</h2>
+
+   <label for="publicMessageInput">Message</label>
+   <input id="publicMessageInput" type="text" placeholder="e.g., Sam is up! Choose a gift." />
+
+   <div class="row">
+     <button id="setPublicMessageBtn" type="button">Set public message</button>
+     <button id="clearPublicMessageBtn" type="button" class="secondary">Clear message</button>
+   </div>
+
+   <div id="publicMessageResult" class="result muted" aria-live="polite"></div>
+</section>
+
+
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -3,7 +3,8 @@
 const STORAGE_KEYS = {
   gameId: "we_game_id",
   sessionName: "we_session_name",
-  createdAt: "we_created_at"
+  createdAt: "we_created_at",
+  publicMessage: "we_public_message",
 };
 
 function pad2(n) {
@@ -146,35 +147,90 @@ function escapeHtml(s) {
 }
 
 function init() {
+  // --- Session UI elements ---
   const sessionNameInput = document.getElementById("sessionName");
   const createBtn = document.getElementById("createSessionBtn");
   const clearBtn = document.getElementById("clearSessionBtn");
 
-  // Load existing session, if any
-  const saved = getSavedSession();
-  if (saved) {
-    sessionNameInput.value = saved.sessionName || "";
-    renderSession(saved);
+  // --- Public message UI elements ---
+  const publicMessageInput = document.getElementById("publicMessageInput");
+  const setPublicMessageBtn = document.getElementById("setPublicMessageBtn");
+  const clearPublicMessageBtn = document.getElementById("clearPublicMessageBtn");
+
+  // --- Initial render: session ---
+  const savedSession = getSavedSession();
+  if (savedSession) {
+    sessionNameInput.value = savedSession.sessionName || "";
+    renderSession(savedSession);
   } else {
     renderSession(null);
   }
 
+  // --- Initial render: public message ---
+  if (publicMessageInput) {
+    publicMessageInput.value = getPublicMessage();
+  }
+  renderPublicMessage();
+
+  // --- Create session ---
   createBtn.addEventListener("click", () => {
     const createdAt = new Date().toISOString();
     const gameId = generateGameId();
 
     let sessionName = (sessionNameInput.value || "").trim();
-    if (!sessionName) sessionName = defaultSessionName(createdAt);
+    if (!sessionName) {
+      sessionName = defaultSessionName(createdAt);
+    }
 
     const session = { gameId, sessionName, createdAt };
     saveSession(session);
     renderSession(session);
   });
 
+  // --- Clear session ---
   clearBtn.addEventListener("click", () => {
     clearSession();
     renderSession(null);
   });
+
+  // --- Set public message ---
+  if (setPublicMessageBtn) {
+    setPublicMessageBtn.addEventListener("click", () => {
+      const msg = (publicMessageInput?.value || "").trim();
+      setPublicMessage(msg);
+      renderPublicMessage();
+    });
+  }
+
+  // --- Clear public message ---
+  if (clearPublicMessageBtn) {
+    clearPublicMessageBtn.addEventListener("click", () => {
+      if (publicMessageInput) publicMessageInput.value = "";
+      clearPublicMessage();
+      renderPublicMessage();
+    });
+  }
+}
+
+
+function getPublicMessage() {
+  return localStorage.getItem(STORAGE_KEYS.publicMessage) || "";
+}
+
+function setPublicMessage(message) {
+  localStorage.setItem(STORAGE_KEYS.publicMessage, message);
+}
+
+function clearPublicMessage() {
+  localStorage.removeItem(STORAGE_KEYS.publicMessage);
+}
+
+function renderPublicMessage() {
+  const el = document.getElementById("publicMessageResult");
+  if (!el) return;
+
+  const msg = getPublicMessage();
+  el.textContent = msg ? `Current: ${msg}` : "No public message set.";
 }
 
 document.addEventListener("DOMContentLoaded", init);
