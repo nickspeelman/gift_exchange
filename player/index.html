@@ -8,9 +8,23 @@
 <body>
   <h1>Gift Exchange – Player</h1>
 
-  <section class="card">
-    <h2>Connected session</h2>
+   <section class="card">
+    <h2>Connection</h2>
+
+    <div class="row" style="align-items:center;">
+      <span id="liveDot" class="dot" aria-hidden="true"></span>
+      <strong id="liveText">Live</strong>
+      <span id="liveDetail" class="muted">Idle</span>
+    </div>
+
     <div id="sessionStatus" class="result" aria-live="polite"></div>
+  </section>
+
+  <section class="card" style="margin-top: 1rem;">
+    <h2>Public message</h2>
+    <div id="publicMessage" class="result muted" aria-live="polite">
+      Waiting for game updates…
+    </div>
   </section>
 
   <script src="js/app.js"></script>
