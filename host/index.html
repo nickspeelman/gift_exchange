@@ -8,6 +8,20 @@
 <body>
   <h1>Gift Exchange – Host</h1>
 
+  <section class="card">
+    <h2>Create session</h2>
+
+    <label for="sessionName">Session name (optional)</label>
+    <input id="sessionName" type="text" placeholder="e.g., Office Party 2026" />
+
+    <div class="row">
+      <button id="createSessionBtn" type="button">Create session</button>
+      <button id="clearSessionBtn" type="button" class="secondary">Clear saved session</button>
+    </div>
+
+    <div id="result" class="result" aria-live="polite"></div>
+  </section>
+
   <script src="js/app.js"></script>
 </body>
 </html>
