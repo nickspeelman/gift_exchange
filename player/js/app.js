@@ -1,168 +1,136 @@
 // player/js/app.js
+import { callApi } from "../../shared/js/apiClient.js";
+import { formatPlayerLabel } from "../../shared/js/ui.js";
 
-const STORAGE_KEYS = {
-  gameId: "we_game_id",
-  publicMessage: "we_public_message"
-};
-
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
-  }[c]));
+function getSessionIdFromUrl_() {
+  const url = new URL(window.location.href);
+  return (url.searchParams.get("gameId") || "").trim();
 }
 
-function getGameIdFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  const gameId = params.get("gameId");
-  return gameId ? gameId.trim() : "";
+function key_(sessionId, suffix) {
+  return `we_${suffix}::${sessionId}`;
 }
 
-function setLiveStatus(mode, detailText) {
-  const dot = document.getElementById("liveDot");
-  const text = document.getElementById("liveText");
-  const detail = document.getElementById("liveDetail");
-
-  dot.classList.remove("live", "error");
-  text.textContent = mode === "live" ? "Live" : "Reconnecting…";
-  detail.textContent = detailText || "";
-
-  if (mode === "live") dot.classList.add("live");
-  if (mode === "error") dot.classList.add("error");
+function savePlayer_(sessionId, player) {
+  localStorage.setItem(key_(sessionId, "player_id"), player.player_id);
+  localStorage.setItem(key_(sessionId, "player_name"), player.player_name);
 }
 
-function setPublicMessage(message) {
-  const el = document.getElementById("publicMessage");
-  el.textContent = message || "Waiting for game updates…";
-  el.classList.remove("pulse");
-  // trigger small animation to make changes feel intentional
-  void el.offsetWidth; // reflow
-  el.classList.add("pulse");
+function show_(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = "";
 }
 
-function renderSession(gameId, source) {
-  const el = document.getElementById("sessionStatus");
+function hide_(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = "none";
+}
 
-  if (!gameId) {
-    el.innerHTML = `
-      <div><strong>Status:</strong> Not connected</div>
-      <div style="margin-top:0.5rem;">
-        Open the Player URL from the host page (it includes <span class="mono">?gameId=...</span>).
-      </div>
-    `;
+function setText_(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const sessionId = getSessionIdFromUrl_();
+  if (!sessionId) {
+    show_("joinPanel");
+    setText_("joinError", "Missing session_id in URL.");
+    show_("joinError");
     return;
   }
 
-  el.innerHTML = `
-    <div><strong>Status:</strong> Connected</div>
-    <div class="kv" style="margin-top:0.5rem;">
-      <div><strong>Game ID</strong></div>
-      <div class="mono">${escapeHtml(gameId)}</div>
-      <div><strong>Source</strong></div>
-      <div>${escapeHtml(source)}</div>
-    </div>
-  `;
-}
+  const joinForm = document.getElementById("joinForm");
+  const joinButton = document.getElementById("joinButton");
+  const nameInput = document.getElementById("playerNameInput");
+  const pronounsInput = document.getElementById("playerPronouns");
 
-function init() {
-  // Start optimistic
-  setLiveStatus("live", "Idle");
 
-  // 1) Prefer URL
-  const fromUrl = getGameIdFromUrl();
-  if (fromUrl) {
-    localStorage.setItem(STORAGE_KEYS.gameId, fromUrl);
-    renderSession(fromUrl, "URL");
-    setPublicMessage("Connected. Waiting for the host to start the game…");
-    startPolling(fromUrl);
-    return;
-  }
+  console.log("joinPanel?", !!document.getElementById("joinPanel"), "waitingPanel?", !!document.getElementById("waitingPanel"));
 
-  // 2) Fall back to localStorage
-  const fromStorage = localStorage.getItem(STORAGE_KEYS.gameId) || "";
-  renderSession(fromStorage, fromStorage ? "localStorage" : "none");
+  // Start with join visible (we’ll refine this once we integrate with your session-status render)
+  show_("joinPanel");
+  hide_("waitingPanel");
+  hide_("joinError");
 
-  if (fromStorage) {
-    setPublicMessage("Reconnected. Waiting for the host to start the game…");
-    startPolling(fromStorage);
-  } else {
-    setPublicMessage("Not connected to a game yet.");
-    setLiveStatus("error", "Missing gameId");
-  }
-}
+  joinForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
 
-function readPublicMessageFromStorage() {
-  return localStorage.getItem(STORAGE_KEYS.publicMessage) || "";
-}
-
-// This is our "backend" for now.
-// Later, this will fetch JSON from Apps Script.
-async function poll(gameId, ctx) {
-  // gameId is unused for localStorage, but we include it now so the signature matches future API polling.
-  const msg = readPublicMessageFromStorage();
-
-  const changed = msg !== ctx.lastMessage;
-  if (changed) {
-    ctx.lastMessage = msg;
-  }
-
-  return {
-    ok: true,
-    changed,
-    publicMessage: msg
-  };
-}
-
-function startPolling(gameId) {
-  const ctx = {
-    lastMessage: null,
-    timerId: null,
-    inFlight: false
-  };
-
-  // Seed lastMessage so first poll behaves nicely
-  ctx.lastMessage = readPublicMessageFromStorage();
-  if (ctx.lastMessage) {
-    setPublicMessage(ctx.lastMessage);
-  }
-
-  async function tick() {
-    if (ctx.inFlight) return;
-    ctx.inFlight = true;
-
-    try {
-      setLiveStatus("live", "Polling");
-      const res = await poll(gameId, ctx);
-
-      if (!res.ok) {
-        setLiveStatus("error", "Reconnecting…");
-        return;
-      }
-
-      if (res.changed) {
-        setPublicMessage(res.publicMessage || "Waiting for game updates…");
-        setLiveStatus("live", "Updated");
-        setTimeout(() => setLiveStatus("live", "Idle"), 600);
-      } else {
-        setLiveStatus("live", "Idle");
-      }
-    } catch (err) {
-      console.error(err);
-      setLiveStatus("error", "Reconnecting…");
-    } finally {
-      ctx.inFlight = false;
+    const playerName = String(nameInput.value || "").trim();
+    if (!playerName) {
+      setText_("joinError", "Please enter your name.");
+      show_("joinError");
+      return;
     }
-  }
 
-  // Start now + repeat
-  tick();
-  ctx.timerId = setInterval(tick, 1200);
+    function normalizePronouns(s) {
+        return (s || "").trim().replace(/\s+/g, " ");
+        }
+    console.log(pronounsInput.value)
+    const pronouns = normalizePronouns(pronounsInput.value);
+    console.log(pronouns)
+
+    // If required:
+    if (!pronouns) {
+        setText_("joinError","Please enter your pronouns.");
+        show_("joinError");
+    return;
 }
 
+    joinButton.disabled = true;
+    nameInput.disabled = true;
+    hide_("joinError");
 
+        try {
+    const result = await callApi({
+    action: "joinSession",
+    payload: {
+        session_id: sessionId,
+        player_name: playerName,
+        pronouns: pronouns,              // ✅ NEW
+    }
+    });
 
-document.addEventListener("DOMContentLoaded", init);
+      console.log("joinSession result:", result);
+
+      // Support two shapes:
+      // A) { ok: true, data: {...} }
+      // B) { player_id: "...", player_name: "..." }  (data only)
+      const player =
+        (result && typeof result === "object" && "ok" in result)
+          ? (result.ok ? result.data : null)
+          : result;
+
+      if (!player || !player.player_id) {
+        // If your callApi returns envelope and ok=false, it likely threw already,
+        // but this catches unexpected shapes.
+        throw new Error((result && result.error) ? result.error : "Join failed (unexpected response).");
+      }
+
+      savePlayer_(sessionId, player);
+
+      setText_("youAreLabel", `You are: ${formatPlayerLabel(player)}`);
+      hide_("joinPanel");
+      show_("waitingPanel");
+
+      console.log("Joined:", player);
+
+    } catch (err) {
+      console.error("joinSession error:", err);
+
+      // Try to surface the real backend message
+      const msg =
+        (err && err.message) ? err.message :
+        (typeof err === "string") ? err :
+        "Join failed.";
+
+      setText_("joinError", msg);
+      show_("joinError");
+
+      joinButton.disabled = false;
+      nameInput.disabled = false;
+      nameInput.focus();
+    }
+
+  });
+});
